@@ -6,87 +6,120 @@ import email
 from bs4 import BeautifulSoup
 import pandas as pd
 
-user_data_dir = r"C:\Users\wangz\AppData\Local\Google\Chrome\User Data" # <-- 把 '你的用户名' 换成你的实际 Windows 用户名
-profile_directory = "Default"  # 或者 "Profile 1", "Profile 2" 等，取决于 chrome://version 显示的
+user_data_dir = r"C:\Users\wangz\AppData\Local\Google\Chrome\User Data"
+profile_directory = "Default"
 
-target_class = 'product__message-title_area' # 你要查找的 class 名称
-html_content = None # 用来存储提取出来的 HTML 文本
-# -----------
-excel_file_name = 'coles_data.xlsx'
+target_class = 'product__message-title_area'
 product_data = []
+excel_file_name = 'coles_data.xlsx'
 
 chrome_options = webdriver.ChromeOptions()
-
 chrome_options.add_argument(f"user-data-dir={user_data_dir}")
 chrome_options.add_argument(f"profile-directory={profile_directory}")
-
 chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-chrome_options.add_argument("--disable-extensions") # 注意：这个选项可能会阻止加载你本地配置中的扩展，如果需要扩展运行，可以注释掉这行
+chrome_options.add_argument("--disable-extensions")
 chrome_options.add_experimental_option('useAutomationExtension', False)
 chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
-driver = None # 初始化 driver 变量
+driver = None
 try:
     driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
     driver.set_window_size(1920, 1080)
     main_page_url = "https://www.coles.com.au"
     driver.get(main_page_url)
-    time.sleep(5)
+    time.sleep(20)
 
-    pageNumber = 2
-    special_url = f'https://www.coles.com.au/on-special?filter_Special=halfprice&page={pageNumber}'
-    driver.get(special_url)
-    time.sleep(5)
-    result = driver.execute_cdp_cmd('Page.captureSnapshot', {'format': 'mhtml'})
-    msg = email.message_from_string(result['data'])
-    for part in msg.walk():
-        content_type = part.get_content_type()
-        if content_type == 'text/html':
-            payload_bytes = part.get_payload(decode=True)
-            charset = part.get_content_charset() or 'utf-8'
-            try:
-                html_content = payload_bytes.decode(charset)
-                print(f"成功提取并解码 HTML 内容 (使用编码: {charset})。")
-                break # 找到主要的 HTML 部分就停止
-            except UnicodeDecodeError:
-                print(f"警告：使用声明的编码 '{charset}' 解码失败，尝试使用 'utf-8' 作为备用...")
+    special_url_base = 'https://www.coles.com.au/on-special?filter_Special=halfprice&page='
+    current_page = 1
+    total_pages = 1  # 初始化为 1
+
+    while current_page <= total_pages:
+        special_url = f'{special_url_base}{current_page}'
+        driver.get(special_url)
+        time.sleep(5)
+        result = driver.execute_cdp_cmd('Page.captureSnapshot', {'format': 'mhtml'})
+        msg = email.message_from_string(result['data'])
+        html_content = None
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            if content_type == 'text/html':
+                payload_bytes = part.get_payload(decode=True)
+                charset = part.get_content_charset() or 'utf-8'
                 try:
-                    html_content = payload_bytes.decode('utf-8')
+                    html_content = payload_bytes.decode(charset)
+                    print(f"成功提取并解码第 {current_page} 页的 HTML 内容 (使用编码: {charset})。")
                     break
+                except UnicodeDecodeError:
+                    print(f"警告：使用声明的编码 '{charset}' 解码第 {current_page} 页失败，尝试使用 'utf-8' 作为备用...")
+                    try:
+                        html_content = payload_bytes.decode('utf-8')
+                        print(f"成功使用 'utf-8' 备用编码解码第 {current_page} 页。")
+                        break
+                    except Exception as decode_err:
+                        print(f"使用备用编码解码第 {current_page} 页也失败: {decode_err}")
+                        html_content = None
+                        continue
                 except Exception as decode_err:
-                    html_content = None # 重置以防部分解码
-                    continue # 继续查找下一个部分
+                    print(f"解码第 {current_page} 页时发生其他错误: {decode_err}")
+                    html_content = None
+                    continue
 
-    if html_content:
-        print(f"\n正在使用 BeautifulSoup 解析提取的 HTML...")
-        soup = BeautifulSoup(html_content, 'html.parser')
+        if html_content:
+            soup = BeautifulSoup(html_content, 'html.parser')
 
-        print(f"查找所有 class 为 '{target_class}' 的 div 元素...")
-        # 5. 查找所有符合条件的 div 元素
-        elements = soup.find_all('div', class_=target_class)
+            # 在第一页获取总页数
+            if current_page == 1:
+                page_buttons = soup.find_all("span", class_="MuiButtonBase-root")
+                if page_buttons:
+                    try:
+                        total_pages_text = page_buttons[-1].get_text(strip=True)
+                        total_pages = int(total_pages_text)
+                        print(f"总页数已找到: {total_pages}")
+                    except ValueError:
+                        print("警告：无法将总页数文本转换为整数，假设只有 1 页。")
+                        total_pages = 1
+                    except IndexError:
+                        print("警告：未找到分页按钮，假设只有 1 页。")
+                        total_pages = 1
+                else:
+                    print("警告：未找到分页相关的元素，假设只有 1 页。")
+                    total_pages = 1
 
-        # 6. 打印找到的元素内容
-        if elements:
-            print(f"找到了 {len(elements)} 个匹配的元素：")
-            for i, element in enumerate(elements):
-                product_info = {
-                    '产品名称': "N/A",
-                    '原价': "N/A",
-                    '现价': "N/A",
-                    '单位价格': "N/A"
-                }
-                product_info['产品名称'] = element.find("h2", class_="product__title").contents[0]
-                product_info['原价'] = element.find("span", class_="price__was").contents[0].replace(" | Was ", "")
-                product_info['现价'] = element.find("span", class_="price__value").contents[0]
-                product_info['单位价格'] = element.find("div", class_="price__calculation_method").contents[0]
-                product_data.append(product_info)
+            elements = soup.find_all('div', class_=target_class)
+
+            if elements:
+                print(f"在第 {current_page} 页找到了 {len(elements)} 个匹配的元素：")
+                for element in elements:
+                    product_info = {
+                        '产品名称': "N/A",
+                        '原价': "N/A",
+                        '现价': "N/A",
+                        '单位价格': "N/A"
+                    }
+                    title_element = element.find("h2", class_="product__title")
+                    was_price_element = element.find("span", class_="price__was")
+                    now_price_element = element.find("span", class_="price__value")
+                    unit_price_element = element.find("div", class_="price__calculation_method")
+
+                    if title_element and title_element.contents:
+                        product_info['产品名称'] = title_element.contents[0]
+                    if was_price_element and was_price_element.contents:
+                        product_info['原价'] = was_price_element.contents[0].replace(" | Was ", "")
+                    if now_price_element and now_price_element.contents:
+                        product_info['现价'] = now_price_element.contents[0]
+                    if unit_price_element and unit_price_element.contents:
+                        product_info['单位价格'] = unit_price_element.contents[0]
+
+                    product_data.append(product_info)
+            else:
+                print(f"在第 {current_page} 页的 HTML 内容中未找到任何 class 为 '{target_class}' 的 div 元素。")
         else:
-            print(f"在 HTML 内容中未找到任何 class 为 '{target_class}' 的 div 元素。")
-    else:
-        print("错误：未能在 MHTML 文件中找到有效的 HTML 内容部分。")
+            print(f"错误：未能在第 {current_page} 页的 MHTML 文件中找到有效的 HTML 内容部分。")
+
+        current_page += 1
+
 except Exception as e:
     print(f"在处理页面或保存 MHTML 时出错: {e}")
-    # import traceback; traceback.print_exc() # 取消注释查看详细错误栈
 
 finally:
     if driver:
@@ -99,16 +132,13 @@ finally:
 if product_data:
     print(f"\n正在将提取的 {len(product_data)} 条产品数据保存到 Excel 文件: {excel_file_name}")
     try:
-        # 将字典列表转换为 pandas DataFrame
         df = pd.DataFrame(product_data)
-        # 可以指定列的顺序
         df = df[['产品名称', '现价', '原价', '单位价格']]
-        # 将 DataFrame 写入 Excel 文件，不包含索引列
         df.to_excel(excel_file_name, index=False, engine='openpyxl')
         print(f"Excel 文件 '{excel_file_name}' 保存成功。")
     except ImportError:
-            print("错误: 需要安装 'pandas' 和 'openpyxl' 库来保存 Excel 文件。请运行: pip install pandas openpyxl")
+        print("错误: 需要安装 'pandas' 和 'openpyxl' 库来保存 Excel 文件。请运行: pip install pandas openpyxl")
     except Exception as ex:
-            print(f"保存 Excel 文件时出错: {ex}")
+        print(f"保存 Excel 文件时出错: {ex}")
 else:
     print("没有提取到任何产品数据，未创建 Excel 文件。")
