@@ -27,7 +27,7 @@ try:
     driver.set_window_size(1920, 1080)
     main_page_url = "https://www.coles.com.au"
     driver.get(main_page_url)
-    time.sleep(20)
+    time.sleep(60)
 
     special_url_base = 'https://www.coles.com.au/on-special?filter_Special=halfprice&page='
     current_page = 1
