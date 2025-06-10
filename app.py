@@ -171,4 +171,4 @@ with gr.Blocks() as demo:
 if __name__ == "__main__":
     # share=True 会创建一个公开链接，但请注意安全风险
     # In a secure environment, you might remove share=True
-    demo.launch() # 默认不在 Colab 等环境中创建分享链接
+    demo.launch(server_name="0.0.0.0") # 默认不在 Colab 等环境中创建分享链接
