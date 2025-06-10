@@ -96,13 +96,18 @@ try:
                         '现价': "N/A",
                         '单位价格': "N/A"
                     }
-                    title_element = element.find("h2", class_="product__title")
+                    title_href = element.find("a")['href'].split("/")[-1]
+                    title_href_list = title_href.split("-")
+                    code = title_href_list[-1]
+                    title_element = " ".join(title_href_list[:-1])
                     was_price_element = element.find("span", class_="price__was")
                     now_price_element = element.find("span", class_="price__value")
                     unit_price_element = element.find("div", class_="price__calculation_method")
 
-                    if title_element and title_element.contents:
-                        product_info['产品名称'] = title_element.contents[0]
+                    if code:
+                        product_info['产品代码'] = code
+                    if title_element:
+                        product_info['产品名称'] = title_element
                     if was_price_element and was_price_element.contents:
                         product_info['原价'] = was_price_element.contents[0].replace(" | Was ", "")
                     if now_price_element and now_price_element.contents:
