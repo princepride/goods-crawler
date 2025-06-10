@@ -6,7 +6,7 @@ import email
 from bs4 import BeautifulSoup
 import pandas as pd
 
-user_data_dir = r"C:\Users\wangz\AppData\Local\Google\Chrome\User Data"
+user_data_dir = r"~/Library/Application Support/Google/Chrome/"
 profile_directory = "Default"
 
 target_class = 'product__message-title_area'
@@ -138,7 +138,7 @@ if product_data:
     print(f"\n正在将提取的 {len(product_data)} 条产品数据保存到 Excel 文件: {excel_file_name}")
     try:
         df = pd.DataFrame(product_data)
-        df = df[['产品名称', '现价', '原价', '单位价格']]
+        df = df[['产品代码','产品名称', '现价', '原价', '单位价格']]
         df.to_excel(excel_file_name, index=False, engine='openpyxl')
         print(f"Excel 文件 '{excel_file_name}' 保存成功。")
     except ImportError:
