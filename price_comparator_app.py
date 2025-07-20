@@ -28,12 +28,10 @@ def compare_matched_files(
     merged_df = pd.merge(
         df_coles,
         df_ww,
-        on='最佳匹配_Barcode',
+        on='条形码',
         how='outer',
         suffixes=('_Coles', '_Woolworths')
     )
-
-    merged_df['商品描述'] = merged_df['最佳匹配_Description_Coles'].fillna(merged_df['最佳匹配_Description_Woolworths'])
 
     suffixed_price_c = f"{price_col_name_c}_Coles"
     suffixed_price_w = f"{price_col_name_w}_Woolworths"
