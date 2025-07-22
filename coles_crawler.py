@@ -31,7 +31,7 @@ try:
 
     special_url_base = 'https://www.coles.com.au/on-special?filter_Special=halfprice&page='
     current_page = 1
-    total_pages = 1  # 初始化为 1
+    total_pages = 100
 
     while current_page <= total_pages:
         special_url = f'{special_url_base}{current_page}'
@@ -67,43 +67,29 @@ try:
         if html_content:
             soup = BeautifulSoup(html_content, 'html.parser')
 
-            # 在第一页获取总页数
-            if current_page == 1:
-                page_buttons = soup.find_all("span", class_="MuiButtonBase-root")
-                if page_buttons:
-                    try:
-                        total_pages_text = page_buttons[-1].get_text(strip=True)
-                        total_pages = int(total_pages_text)
-                        print(f"总页数已找到: {total_pages}")
-                    except ValueError:
-                        print("警告：无法将总页数文本转换为整数，假设只有 1 页。")
-                        total_pages = 1
-                    except IndexError:
-                        print("警告：未找到分页按钮，假设只有 1 页。")
-                        total_pages = 1
-                else:
-                    print("警告：未找到分页相关的元素，假设只有 1 页。")
-                    total_pages = 1
-
             elements = soup.find_all('div', class_=target_class)
-
+            pricing_elements = soup.find_all('section', class_='product__pricing')
+            print(pricing_elements)
             if elements:
                 print(f"在第 {current_page} 页找到了 {len(elements)} 个匹配的元素：")
-                for element in elements:
+                for element, price_element in zip(elements, pricing_elements):
                     product_info = {
                         '产品名称': "N/A",
                         '原价': "N/A",
                         '现价': "N/A",
                         '单位价格': "N/A"
                     }
+                    href = element.find("a")['href']
                     title_href = element.find("a")['href'].split("/")[-1]
                     title_href_list = title_href.split("-")
                     code = title_href_list[-1]
                     title_element = " ".join(title_href_list[:-1])
-                    was_price_element = element.find("span", class_="price__was")
-                    now_price_element = element.find("span", class_="price__value")
-                    unit_price_element = element.find("div", class_="price__calculation_method")
+                    was_price_element = price_element.find("span", class_="price__was")
+                    now_price_element = price_element.find("span", class_="price__value")
+                    unit_price_element = price_element.find("div", class_="price__calculation_method")
 
+                    if href:
+                        product_info['产品链接'] = href
                     if code:
                         product_info['产品代码'] = code
                     if title_element:
@@ -118,6 +104,7 @@ try:
                     product_data.append(product_info)
             else:
                 print(f"在第 {current_page} 页的 HTML 内容中未找到任何 class 为 '{target_class}' 的 div 元素。")
+                break
         else:
             print(f"错误：未能在第 {current_page} 页的 MHTML 文件中找到有效的 HTML 内容部分。")
 
@@ -138,7 +125,7 @@ if product_data:
     print(f"\n正在将提取的 {len(product_data)} 条产品数据保存到 Excel 文件: {excel_file_name}")
     try:
         df = pd.DataFrame(product_data)
-        df = df[['产品代码','产品名称', '现价', '原价', '单位价格']]
+        df = df[['产品代码', '产品名称', '产品链接', '原价', '现价', '单位价格']]
         df.to_excel(excel_file_name, index=False, engine='openpyxl')
         print(f"Excel 文件 '{excel_file_name}' 保存成功。")
     except ImportError:

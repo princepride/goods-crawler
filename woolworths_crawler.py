@@ -129,10 +129,12 @@ try:
                             except Exception: pass
                             try: product_name = tile.find('div', class_='title').find('a').contents[1].strip()
                             except Exception: pass
+                            try: product_href = tile.find('div', class_='title').find('a')['href']
+                            except Exception: pass
 
                             # 只添加包含有效原价的条目（根据你之前的逻辑）
                             if current_price != "N/A" or original_price != "N/A":
-                                all_product_data.append([product_name, original_price, current_price, price_per_unit])
+                                all_product_data.append([product_name, product_href, original_price, current_price, price_per_unit])
 
             except Exception as page_e:
                  print(f"处理第 {current_page_num} 页时出错: {page_e}")
@@ -148,7 +150,7 @@ if all_product_data:
     print(f"\n所有页面处理完毕，共找到 {len(all_product_data)} 条有效产品数据，正在写入 Excel 文件...")
     try:
         # 定义列名
-        header = ['产品名称', '原价', '现价', '单位价格']
+        header = ['产品名称', '产品链接', '原价', '现价', '单位价格']
         # 创建 pandas DataFrame
         df = pd.DataFrame(all_product_data, columns=header)
         # 写入 Excel 文件，不包含索引列
