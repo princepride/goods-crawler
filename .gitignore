@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 *.zip
 /ARF_Word_Documents
+.DS_Store
