@@ -10,7 +10,7 @@ def compare_matched_files(
 ):
     """
     Gradio调用的主函数，用于读取两个已匹配的Excel文件并进行比价。
-    此版本修复了因条形码重复导致输出行数爆炸的问题。
+    此版本新增了对“产品链接”字段的支持，并修复了因条形码重复导致输出行数爆炸的问题。
     """
     if coles_matched_file is None or woolworths_matched_file is None:
         return pd.DataFrame(), None, "错误：请同时上传Coles和Woolworths的匹配文件。"
@@ -30,12 +30,9 @@ def compare_matched_files(
         return pd.DataFrame(), None, f"错误：在Woolworths文件中找不到价格列 '{price_col_name_w}'"
 
     # --- 关键修复：合并前处理重复的条形码 ---
-    # 1. 删除条形码为空的行
     df_coles.dropna(subset=['条形码'], inplace=True)
     df_ww.dropna(subset=['条形码'], inplace=True)
 
-    # 2. 对条形码进行去重，只保留第一次出现的记录
-    # 这是解决行数爆炸问题的核心步骤
     initial_rows_c = len(df_coles)
     initial_rows_w = len(df_ww)
     df_coles = df_coles.drop_duplicates(subset=['条形码'], keep='first')
@@ -50,7 +47,6 @@ def compare_matched_files(
     )
 
     # --- 合并数据 ---
-    # 使用 outer join 来保留两个表所有的商品
     merged_df = pd.merge(
         df_coles,
         df_ww,
@@ -65,10 +61,9 @@ def compare_matched_files(
 
     for col in [price_c_suffixed, price_w_suffixed]:
         if col in merged_df.columns:
-            # 先转为字符串，替换掉货币符号和逗号，再转为数字
             merged_df[col] = pd.to_numeric(
                 merged_df[col].astype(str).str.replace(r'[$,]', '', regex=True),
-                errors='coerce' # 如果转换失败，则设为NaN
+                errors='coerce'
             )
 
     # --- 比价逻辑 ---
@@ -84,31 +79,39 @@ def compare_matched_files(
     merged_df['差价'] = (merged_df[price_c_suffixed] - merged_df[price_w_suffixed]).abs().round(2)
 
     # --- 准备最终输出的DataFrame ---
-    # 动态找到产品名称列，并处理合并后可能不存在的情况
-    name_col_c = next((col for col in merged_df.columns if col.endswith('_Coles') and '产品名称' in col), '产品名称_Coles')
-    name_col_w = next((col for col in merged_df.columns if col.endswith('_Woolworths') and '产品名称' in col), '产品名称_Woolworths')
+    # 动态找到所需列，并处理合并后可能不存在的情况
+    name_col_c = next((col for col in merged_df.columns if '产品名称' in col and col.endswith('_Coles')), '产品名称_Coles')
+    name_col_w = next((col for col in merged_df.columns if '产品名称' in col and col.endswith('_Woolworths')), '产品名称_Woolworths')
+    link_col_c = next((col for col in merged_df.columns if '产品链接' in col and col.endswith('_Coles')), '产品链接_Coles')
+    link_col_w = next((col for col in merged_df.columns if '产品链接' in col and col.endswith('_Woolworths')), '产品链接_Woolworths')
     
     # 为保证列的完整性，如果某些列不存在则创建空列
-    for col in [name_col_c, name_col_w, price_c_suffixed, price_w_suffixed]:
+    cols_to_check = [name_col_c, name_col_w, price_c_suffixed, price_w_suffixed, link_col_c, link_col_w]
+    for col in cols_to_check:
         if col not in merged_df.columns:
             merged_df[col] = np.nan if '价格' in col else 'N/A'
 
-    # 整理最终显示的列，并重命名
+    # 整理最终显示的列
     final_df = merged_df[[
         '条形码',
         name_col_c,
         price_c_suffixed,
+        link_col_c,
         name_col_w,
         price_w_suffixed,
+        link_col_w,
         '便宜的平台',
         '差价'
-    ]].copy() # 使用 .copy() 避免后续操作的警告
+    ]].copy()
 
+    # 重命名列以获得更清晰的展示效果
     final_df.rename(columns={
         name_col_c: 'Coles_产品名称',
         price_c_suffixed: 'Coles_价格',
+        link_col_c: 'Coles_产品链接',
         name_col_w: 'Woolworths_产品名称',
-        price_w_suffixed: 'Woolworths_价格'
+        price_w_suffixed: 'Woolworths_价格',
+        link_col_w: 'Woolworths_产品链接'
     }, inplace=True)
 
     # --- 保存并返回结果 ---
@@ -124,8 +127,8 @@ with gr.Blocks(theme=gr.themes.Soft()) as app:
     gr.Markdown("# 🛒 商品比价工具 (基于匹配结果)")
     gr.Markdown(
         "**操作流程:**\n"
-        "1. 上传两个平台包含“条形码”和价格的Excel文件。\n"
-        "2. 确认两个文件中的价格列名称是否正确。\n"
+        "1. 上传两个平台包含“条形码”、“价格”和“产品链接”的Excel文件。\n"
+        "2. 确认两个文件中的价格列名称是否正确 (链接列会自动识别)。\n"
         "3. 点击“开始比价”。工具会自动处理重复商品，只比较唯一项。"
     )
 
